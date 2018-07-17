@@ -26,18 +26,16 @@
 
   var targetPublisher;
 
-  var updateStatusFromEvent = window.red5proHandlePublisherEvent; 
+  var updateStatusFromEvent = window.red5proHandlePublisherEvent; // defined in src/template/partial/status-field-publisher.hbs
   var streamTitle = document.getElementById('stream-title');
   var statisticsField = document.getElementById('statistics-field');
   var addressField = document.getElementById('address-field');
-
-  // Log In stuff
+  
   var loginForm = document.getElementById('login-form');
   var usernameField = document.getElementById('username-field');
   var passwordField = document.getElementById('password-field');
   var submitButton = document.getElementById('submit-button');
 
-  
   var protocol = serverSettings.protocol;
   var isSecure = protocol == 'https';
   function getSocketLocationFromProtocol () {
@@ -46,17 +44,17 @@
       : {protocol: 'wss', port: serverSettings.wssport};
   }
 
-   var defaultConfiguration = {
+  var defaultConfiguration = {
     protocol: getSocketLocationFromProtocol().protocol,
     port: getSocketLocationFromProtocol().port
   };
-  
+
   function displayServerAddress (serverAddress, proxyAddress) 
   {
   proxyAddress = (typeof proxyAddress === 'undefined') ? 'N/A' : proxyAddress;
     addressField.innerText = ' Proxy Address: ' + proxyAddress + ' | ' + ' Origin Address: ' + serverAddress;
   }
-  
+
   function onBitrateUpdate (bitrate, packetsSent) {
     statisticsField.innerText = 'Bitrate: ' + Math.floor(bitrate) + '. Packets Sent: ' + packetsSent + '.';
   }
@@ -74,20 +72,16 @@
       window.trackBitrate(publisher.getPeerConnection(), onBitrateUpdate);
     }
     catch (e) {
-      // no tracking for you!
+      //
     }
   }
-  
-  
   function onUnpublishFail (message) {
     console.error('[Red5ProPublisher] Unpublish Error :: ' + message);
   }
   function onUnpublishSuccess () {
     console.log('[Red5ProPublisher] Unpublish Complete.');
   }
-  
-  
-  
+
   function requestOrigin (configuration) {
     var host = configuration.host;
     var app = configuration.app;
@@ -118,8 +112,6 @@
           });
     });
   }
-  
-  
 
   function getUserMediaConfiguration () {
     return {
@@ -129,7 +121,7 @@
       }
     };
   }
-  
+
   function getRTMPMediaConfiguration () {
     return {
       mediaConstraints: {
@@ -141,20 +133,11 @@
       }
     }
   }
-  
-  
-  
 
   function determinePublisher (jsonResponse) {
-
     var host = jsonResponse.serverAddress;
     var app = jsonResponse.scope;
     var name = jsonResponse.name;
-    
-    configuration.connectionParams.host = host;
-    configuration.connectionParams.app = app;
-    
-    console.log('conn params: '+JSON.stringify(configuration.connectionParams));
     var config = Object.assign({},
                     configuration,
                     defaultConfiguration,
@@ -164,21 +147,28 @@
                       port: getSocketLocationFromProtocol().port,
                       streamName: name,
                       streamMode: 'record',
-                      app: configuration.proxy
+                      app: configuration.proxy,
+                      connectionParams: {
+                        host: host,
+                        app: app,
+                        username: usernameField.value,
+                        password: passwordField.value
+                      }
                    });
     var rtmpConfig = Object.assign({}, config, {
                       host: host,
                       app: app,
+                      username: usernameField.value,
+                      password: passwordField.value,
                       protocol: 'rtmp',
-                      configuration.connectionParams,
-                      port: serverSettings.rtmpport,
                       streamMode: 'record',
+                      port: serverSettings.rtmpport,
                       streamName: name,
                       backgroundColor: '#000000',
                       swf: '../../lib/red5pro/red5pro-publisher.swf',
                       swfobjectURL: '../../lib/swfobject/swfobject.js',
                       productInstallURL: '../../lib/swfobject/playerProductInstall.swf'
-                   });
+                    }, getRTMPMediaConfiguration());
     var publishOrder = config.publisherFailoverOrder
                             .split(',')
                             .map(function (item) {
@@ -196,7 +186,7 @@
                 rtmp: rtmpConfig
               });
   }
-  
+
   function showAddress (publisher) {
     var config = publisher.getOptions();
     console.log("Host = " + config.host + " | " + "app = " + config.app);
@@ -216,45 +206,22 @@
     }
   }
 
-  
-  function pingWebApp(){
-    console.log("called");
-    var xhr = new XMLHttpRequest();
-    var url = "http://localhost:5080/auctionfrontiers/publishstop";
-    xhr.open("POST", url, true);
-    xhr.setRequestHeader("Content-Type", "application/json");
-    xhr.onreadystatechange = function () {
-        if (xhr.readyState === 4 && xhr.status === 200) {
-            
-            //alert("received reply");
-        }
-    };
-    var data = JSON.stringify({"customerScope": "scope", "streamName": "stream1"});
-    xhr.send(data); 
-  }
-  
-
   function unpublish () {
     return new Promise(function (resolve, reject) {
       var publisher = targetPublisher;
       publisher.unpublish()
         .then(function () {
-            pingWebApp();
           onUnpublishSuccess();
           resolve();
         })
         .catch(function (error) {
-            pingWebApp();
           var jsonError = typeof error === 'string' ? error : JSON.stringify(error, 2, null);
           onUnpublishFail('Unmount Error ' + jsonError);
           reject(error);
         });
     });
-    
-    pingWebApp();
   }
 
-  
   var retryCount = 0;
   var retryLimit = 3;
   function respondToOrigin (response) {
@@ -295,45 +262,22 @@
     }
   }
 
-  
   function startup () {
     // Kick off.
     requestOrigin(configuration)
       .then(respondToOrigin)
       .catch(respondToOriginFailure);
   }
-  
-  
-  function start () {
-    // Kick off.
-    loginForm.classList.add('hidden');
-    determinePublisher()
-      .then(function (publisherImpl) {
-        streamTitle.innerText = configuration.stream1;
-        targetPublisher = publisherImpl;
-        targetPublisher.on('*', onPublisherEvent);
-        return targetPublisher.publish();
-      })
-      .then(function () {
-      onPublishSuccess(targetPublisher);
-      })
-      .catch(function (error) {
-        var jsonError = typeof error === 'string' ? error : JSON.stringify(error, null, 2);
-        console.error('[Red5ProPublisher] :: Error in publishing - ' + jsonError);
-        onPublishFail(jsonError);
-        loginForm.classList.remove('hidden');
-       });
-  }
+  //startup();
 
   submitButton.addEventListener('click', function () {
-    configuration.connectionParams = {
+    /*configuration.connectionParams = {
       username: usernameField.value,
       password: passwordField.value
-    };
-    //start();
+    };*/
     startup();
   });
-
+  
   window.addEventListener('beforeunload', function() {
     function clearRefs () {
       if (targetPublisher) {
@@ -344,6 +288,5 @@
     unpublish().then(clearRefs).catch(clearRefs);
     window.untrackBitrate();
   });
-
 })(this, document, window.red5prosdk);
 
