@@ -268,14 +268,19 @@
       .then(respondToOrigin)
       .catch(respondToOriginFailure);
   }
-  //startup();
 
   submitButton.addEventListener('click', function () {
-    /*configuration.connectionParams = {
-      username: usernameField.value,
-      password: passwordField.value
-    };*/
-    startup();
+    var statusField = document.getElementById('status-field');
+        
+    if (usernameField.value === "" || passwordField.value === "")
+    {
+        statusField.innerText = "Error: Wrong username or password supplied";
+    }
+    else
+    {
+        statusField.innerText = "";
+        startup();
+    }
   });
   
   window.addEventListener('beforeunload', function() {
